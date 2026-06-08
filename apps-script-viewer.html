@@ -2,17 +2,15 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Stark Future | 3D Parts Identifier</title>
-  <meta name="theme-color" content="#000000">
+  <meta name="theme-color" content="#080809">
   <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/miguelmontoya-SFM/stark-public-assets/main/branding/Stark%20Future%20Ring%20RGB.png">
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: { extend: { colors: { 'stark-green':'#00ff41','stark-red':'#ff0033','stark-gold':'#C9A84C' } } }
-    }
-  </script>
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script>tailwind.config={theme:{extend:{colors:{'stark-green':'#00ff41','stark-red':'#ff0033','stark-gold':'#C9A84C'}}}}</script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/loaders/DRACOLoader.js"></script>
@@ -34,35 +32,122 @@
       --bg:#080809; --card:#0e0e10; --border:#1a1a1f;
       --gold:#C9A84C; --gold-bright:#FFD700; --green:#00ff41; --red:#ff0033;
       --text:#eeeeee; --muted:#6b7280;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-top: env(safe-area-inset-top, 0px);
     }
-    html,body { background:var(--bg); color:var(--text); font-family:'StarkSans','Inter',system-ui,sans-serif; height:100%; overflow:hidden; }
+    html, body { background:var(--bg); color:var(--text); font-family:'StarkSans','Inter',system-ui,sans-serif; height:100%; overflow:hidden; -webkit-text-size-adjust:100%; }
+    body { padding-top:var(--safe-top); }
     #canvas-wrap { position:relative; width:100vw; height:100vh; }
-    canvas { display:block; width:100%!important; height:100%!important; }
-    @keyframes slideInRight { from{opacity:0;transform:translateX(14px)} to{opacity:1;transform:translateX(0)} }
-    @keyframes shimmer { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+    canvas { display:block; width:100%!important; height:100%!important; touch-action:none; }
+
+    /* ── Animations ── */
+    @keyframes slideInRight  { from{opacity:0;transform:translateX(16px)} to{opacity:1;transform:translateX(0)} }
+    @keyframes slideInBottom { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes shimmer  { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+    @keyframes spin     { to{transform:rotate(360deg)} }
+    @keyframes pulse-glow { 0%,100%{box-shadow:0 0 0 0 rgba(201,168,76,0)} 50%{box-shadow:0 0 0 6px rgba(201,168,76,.12)} }
     .shimmer { background:linear-gradient(90deg,#1a1a1a 25%,#262626 50%,#1a1a1a 75%); background-size:400px 100%; animation:shimmer 1.4s infinite; }
-    @keyframes starkFadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-    /* Loader overlay */
+
+    /* ── Loader ── */
     #loader { position:fixed; inset:0; background:#080809; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:50; transition:opacity .6s; }
     #loader.fade-out { opacity:0; pointer-events:none; }
-    #loader-bar-track { width:280px; height:2px; background:#1a1a1a; border-radius:9px; margin-top:24px; }
+    #loader-bar-track { width:min(280px,70vw); height:2px; background:#1a1a1a; border-radius:9px; margin-top:24px; }
     #loader-bar { height:100%; background:linear-gradient(90deg,#C9A84C,#FFD700); border-radius:9px; transition:width .2s; width:0%; box-shadow:0 0 12px #C9A84C88; }
-    /* Header */
-    #header { position:fixed; top:0; left:0; right:0; z-index:20; padding:16px 20px; display:flex; align-items:center; gap:12px; pointer-events:none; }
-    .header-badge { background:rgba(8,8,9,.85); backdrop-filter:blur(16px); border:1px solid rgba(255,255,255,.07); border-radius:12px; padding:8px 14px; }
-    /* Help pill */
-    #help-pill { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:20;
-      background:rgba(8,8,9,.8); backdrop-filter:blur(12px); border:1px solid rgba(255,255,255,.06);
-      border-radius:99px; padding:8px 18px; font-size:11px; color:var(--muted); font-family:monospace;
-      pointer-events:none; transition:opacity .4s; }
+
+    /* ── Header ── */
+    #header { position:fixed; top:0; left:0; right:0; z-index:20; padding:max(12px, calc(var(--safe-top) + 10px)) 16px 12px; display:flex; align-items:center; gap:10px; pointer-events:none; }
+    .header-badge { background:rgba(8,8,9,.88); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border:1px solid rgba(255,255,255,.07); border-radius:12px; padding:8px 13px; }
+
+    /* ── Help pill ── */
+    #help-pill { position:fixed; bottom:calc(28px + var(--safe-bottom)); left:50%; transform:translateX(-50%); z-index:20;
+      background:rgba(8,8,9,.82); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+      border:1px solid rgba(255,255,255,.06); border-radius:99px; padding:9px 20px;
+      font-size:12px; color:var(--muted); white-space:nowrap;
+      pointer-events:none; transition:opacity .5s; }
     #help-pill.hidden { opacity:0; }
-    /* Part panel base */
-    .part-panel { position:fixed; bottom:20px; right:20px; z-index:30; animation:slideInRight .22s cubic-bezier(.4,0,.2,1); }
+
+    /* ── Part panel — shared ── */
+    .part-panel { position:fixed; z-index:30; }
+    .part-panel-inner {
+      background:rgba(8,8,9,.97);
+      backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
+      border:1px solid rgba(255,255,255,.065);
+      box-shadow:0 24px 64px rgba(0,0,0,.85);
+      overflow:hidden;
+    }
+
+    /* ── MOBILE: bottom sheet (<540px) ── */
+    @media (max-width:539px) {
+      .part-panel { bottom:0; left:0; right:0; animation:slideInBottom .24s cubic-bezier(.4,0,.2,1); }
+      .part-panel-inner { border-radius:22px 22px 0 0; border-bottom:none; max-height:72vh; display:flex; flex-direction:column; }
+      .panel-scroll { overflow-y:auto; flex:1; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+      .panel-scroll::-webkit-scrollbar { display:none; }
+      .panel-handle { width:36px; height:4px; background:#2a2a2e; border-radius:99px; margin:10px auto 4px; flex-shrink:0; }
+      .part-panel .panel-pad { padding:14px 20px 16px; }
+      .panel-part-no { font-size:clamp(22px,6vw,32px) !important; }
+      .panel-search-results { max-height:38vh; }
+      .panel-btn { min-height:44px; }
+      .safe-bottom-pad { height:calc(16px + var(--safe-bottom)); flex-shrink:0; }
+    }
+
+    /* ── TABLET: side panel (540px–1023px) ── */
+    @media (min-width:540px) and (max-width:1023px) {
+      .part-panel { bottom:20px; right:16px; animation:slideInRight .22s cubic-bezier(.4,0,.2,1); }
+      .part-panel-inner { border-radius:20px; width:320px; }
+      .part-panel .panel-pad { padding:18px 20px; }
+      .panel-part-no { font-size:28px !important; }
+      .panel-search-results { max-height:240px; }
+      .panel-btn { min-height:40px; }
+      .panel-handle, .safe-bottom-pad { display:none; }
+    }
+
+    /* ── DESKTOP: side panel (1024px+) ── */
+    @media (min-width:1024px) {
+      .part-panel { bottom:24px; right:24px; animation:slideInRight .22s cubic-bezier(.4,0,.2,1); }
+      .part-panel-inner { border-radius:20px; width:300px; }
+      .part-panel .panel-pad { padding:18px 20px; }
+      .panel-part-no { font-size:30px !important; }
+      .panel-search-results { max-height:200px; }
+      .panel-btn { min-height:38px; }
+      .panel-handle, .safe-bottom-pad { display:none; }
+    }
+
+    /* ── Search results scroll ── */
+    .panel-search-results { overflow-y:auto; scrollbar-width:thin; scrollbar-color:#222 transparent; }
+    .panel-search-results::-webkit-scrollbar { width:4px; }
+    .panel-search-results::-webkit-scrollbar-track { background:transparent; }
+    .panel-search-results::-webkit-scrollbar-thumb { background:#222; border-radius:9px; }
+
+    /* ── Touch-friendly close btn ── */
+    .close-btn { display:flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,.05); border:none; color:#6b7280; cursor:pointer; transition:all .15s; flex-shrink:0; -webkit-tap-highlight-color:transparent; }
+    .close-btn:hover, .close-btn:active { background:rgba(255,255,255,.1); color:#fff; }
+
+    /* ── Tag row btn ── */
+    .tag-row-btn { width:100%; text-align:left; padding:11px 20px; background:none; border:none; cursor:pointer; transition:background .15s; -webkit-tap-highlight-color:transparent; }
+    .tag-row-btn:hover, .tag-row-btn:active { background:rgba(255,255,255,.04); }
+
+    /* ── Action button ── */
+    .action-btn { display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-family:monospace; border-radius:12px; padding:0 16px; cursor:pointer; transition:all .2s; text-decoration:none; width:100%; -webkit-tap-highlight-color:transparent; }
+    .action-btn-primary { color:#C9A84C; background:rgba(201,168,76,.1); border:1px solid rgba(201,168,76,.3); }
+    .action-btn-primary:hover, .action-btn-primary:active { color:#FFD700; background:rgba(201,168,76,.2); }
+    .action-btn-secondary { color:#6b7280; background:#111113; border:1px solid #1e1e22; }
+    .action-btn-secondary:hover, .action-btn-secondary:active { color:#aaa; background:#1a1a1e; }
+
+    /* ── Search input wrap ── */
+    .search-wrap { display:flex; align-items:center; gap:10px; background:rgba(255,255,255,.04); border:1px solid #1e1e22; border-radius:14px; padding:11px 14px; transition:border-color .2s; }
+    .search-wrap:focus-within { border-color:rgba(201,168,76,.5); }
+    .search-input { background:none; border:none; outline:none; color:#eee; font-size:14px; width:100%; font-family:monospace; }
+
+    /* ── Stock ring label ── */
+    .stock-label { font-size:9px; font-family:monospace; text-transform:uppercase; letter-spacing:.1em; }
+
+    /* ── Chip pill ── */
+    .chip { font-size:9px; font-family:monospace; text-transform:uppercase; letter-spacing:.08em; color:#9ca3af; background:#111113; border:1px solid #1e1e22; border-radius:99px; padding:4px 12px; }
   </style>
 </head>
 <body>
 
-<!-- ── LOADER ─────────────────────────────────────────────────────────── -->
+<!-- LOADER -->
 <div id="loader">
   <img src="https://raw.githubusercontent.com/miguelmontoya-SFM/stark-public-assets/main/branding/Stark%20Future%20Ring%20RGB.png"
        width="52" height="52" alt="Stark" style="filter:drop-shadow(0 0 20px #C9A84C66)">
@@ -71,29 +156,29 @@
   <p id="loader-pct" style="margin-top:10px;font-size:11px;color:#444;font-family:monospace">0%</p>
 </div>
 
-<!-- ── HEADER ─────────────────────────────────────────────────────────── -->
+<!-- HEADER -->
 <div id="header">
-  <div class="header-badge" style="display:flex;align-items:center;gap:10px">
+  <div class="header-badge" style="display:flex;align-items:center;gap:9px">
     <img src="https://raw.githubusercontent.com/miguelmontoya-SFM/stark-public-assets/main/branding/Stark%20Future%20Ring%20RGB.png"
-         width="22" height="22" alt="Stark">
-    <span style="font-size:12px;font-weight:500;color:#eee;letter-spacing:.04em">3D Parts Identifier</span>
+         width="20" height="20" alt="Stark">
+    <span style="font-size:12px;font-weight:500;color:#eee;letter-spacing:.04em;white-space:nowrap">3D Parts Identifier</span>
   </div>
   <div class="header-badge" id="tagged-counter" style="display:none">
     <span style="font-size:11px;font-family:monospace;color:#C9A84C">
-      <span id="tagged-num">0</span> partes catalogadas
+      <span id="tagged-num">0</span> <span id="tagged-label">catalogadas</span>
     </span>
   </div>
 </div>
 
-<!-- ── CANVAS ─────────────────────────────────────────────────────────── -->
+<!-- CANVAS -->
 <div id="canvas-wrap">
   <canvas id="three-canvas"></canvas>
 </div>
 
-<!-- ── HELP PILL ──────────────────────────────────────────────────────── -->
-<div id="help-pill">Click en cualquier parte para identificarla</div>
+<!-- HELP PILL -->
+<div id="help-pill">Toca cualquier parte para identificarla</div>
 
-<!-- ── PART PANEL (rendered by JS) ───────────────────────────────────── -->
+<!-- PART PANEL -->
 <div id="part-panel-root"></div>
 
 <script>
@@ -104,6 +189,8 @@ const GLB_URL       = 'https://raw.githubusercontent.com/miguelmontoya-SFM/stark
 const DRACO_PATH    = 'https://www.gstatic.com/draco/versioned/decoders/1.5.6/';
 const PARTS_MAP_URL = 'https://raw.githubusercontent.com/miguelmontoya-SFM/stark-public-assets/claude/moto-parts-cad-identification-372jL/parts-mesh-map.json';
 const BC_BASE_URL   = 'https://businesscentral.dynamics.com';
+
+const isMobile = () => window.innerWidth < 540;
 
 // ═══════════════════════════════════════════════════════════════
 //  PARTS MAP CACHE
@@ -119,7 +206,7 @@ async function getPartsMap() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  google.script.run PROMISE WRAPPER
+//  GAS BRIDGE
 // ═══════════════════════════════════════════════════════════════
 function callGAS(fn, ...args) {
   return new Promise((resolve, reject) => {
@@ -132,8 +219,8 @@ function callGAS(fn, ...args) {
 //  THREE.JS SETUP
 // ═══════════════════════════════════════════════════════════════
 const canvas   = document.getElementById('three-canvas');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isMobile(), alpha:false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile() ? 1.5 : 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -147,60 +234,44 @@ camera.position.set(0, 0.8, 2.8);
 
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.dampingFactor = 0.06;
-controls.minDistance = 0.5;
-controls.maxDistance = 8;
+controls.dampingFactor = 0.07;
+controls.minDistance = 0.4;
+controls.maxDistance = 10;
+controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 
-// Environment
 const pmremGen = new THREE.PMREMGenerator(renderer);
 scene.environment = pmremGen.fromScene(new THREE.RoomEnvironment(), 0.04).texture;
 
-// Bloom post-processing
 const composer  = new THREE.EffectComposer(renderer);
 composer.addPass(new THREE.RenderPass(scene, camera));
 const bloomPass = new THREE.UnrealBloomPass(
-  new THREE.Vector2(window.innerWidth, window.innerHeight), 0.35, 0.6, 0.82
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  isMobile() ? 0.25 : 0.35, 0.6, 0.82
 );
 composer.addPass(bloomPass);
 
 // ═══════════════════════════════════════════════════════════════
 //  MESH STATE
 // ═══════════════════════════════════════════════════════════════
-let allMeshes = [];
-let hoveredMesh = null, selectedMesh = null;
-const origEmissive = new Map(); // mesh → original emissive hex
-
+let allMeshes = [], hoveredMesh = null, selectedMesh = null;
+const origEmissive = new Map();
 const HOVER_COLOR  = new THREE.Color(0xFFCC44);
 const SELECT_COLOR = new THREE.Color(0xFFD700);
-const DIM_COLOR    = new THREE.Color(0x888888);
 
 function setEmissive(mesh, color, intensity) {
   const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-  mats.forEach(mat => {
-    if (mat.emissive !== undefined) {
-      mat.emissive.copy(color);
-      mat.emissiveIntensity = intensity;
-    }
-  });
+  mats.forEach(m => { if (m.emissive) { m.emissive.copy(color); m.emissiveIntensity = intensity; } });
 }
 function resetEmissive(mesh) {
   const orig = origEmissive.get(mesh);
   if (!orig) return;
   const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-  mats.forEach(mat => {
-    if (mat.emissive !== undefined) {
-      mat.emissive.copy(orig.color);
-      mat.emissiveIntensity = orig.intensity;
-    }
-  });
+  mats.forEach(m => { if (m.emissive) { m.emissive.copy(orig.color); m.emissiveIntensity = orig.intensity; } });
 }
 function storeOrigEmissive(mesh) {
   if (origEmissive.has(mesh)) return;
-  const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-  origEmissive.set(mesh, {
-    color: mat?.emissive ? mat.emissive.clone() : new THREE.Color(0),
-    intensity: mat?.emissiveIntensity ?? 0
-  });
+  const m = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+  origEmissive.set(mesh, { color: m?.emissive ? m.emissive.clone() : new THREE.Color(0), intensity: m?.emissiveIntensity ?? 0 });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -215,46 +286,32 @@ const loaderBar = document.getElementById('loader-bar');
 const loaderPct = document.getElementById('loader-pct');
 const loaderEl  = document.getElementById('loader');
 
-gltfLoader.load(
-  GLB_URL,
+gltfLoader.load(GLB_URL,
   (gltf) => {
-    // Center model
     const box = new THREE.Box3().setFromObject(gltf.scene);
     const center = box.getCenter(new THREE.Vector3());
     gltf.scene.position.sub(center);
     const size = box.getSize(new THREE.Vector3()).length();
-    camera.position.set(0, size*0.25, size*0.9);
+    camera.position.set(0, size*0.25, size*(isMobile()?1.1:0.9));
     controls.target.set(0, 0, 0);
     controls.update();
-
     gltf.scene.traverse(child => {
       if (!child.isMesh) return;
       storeOrigEmissive(child);
-      child.castShadow = true;
       allMeshes.push(child);
     });
-
     scene.add(gltf.scene);
-
-    // Fade out loader
     loaderEl.classList.add('fade-out');
     setTimeout(() => { loaderEl.style.display='none'; }, 600);
-
-    // Update tagged counter
     updateTaggedCounter();
-    
-    // Dim help pill after 4s
     setTimeout(() => document.getElementById('help-pill').classList.add('hidden'), 4000);
   },
   (xhr) => {
-    const pct = Math.round((xhr.loaded / xhr.total) * 100);
+    const pct = xhr.total ? Math.round((xhr.loaded/xhr.total)*100) : 0;
     loaderBar.style.width = pct + '%';
     loaderPct.textContent = pct + '%';
   },
-  (err) => {
-    loaderPct.textContent = 'Error al cargar modelo';
-    console.error('GLB load error:', err);
-  }
+  (err) => { loaderPct.textContent = 'Error al cargar modelo'; console.error(err); }
 );
 
 // ═══════════════════════════════════════════════════════════════
@@ -267,15 +324,27 @@ async function updateTaggedCounter() {
   if (count > 0) {
     el.style.display = '';
     document.getElementById('tagged-num').textContent = count;
+    document.getElementById('tagged-label').textContent = window.innerWidth < 360 ? '' : 'catalogadas';
   }
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  RAYCASTER + CLICK HANDLING
+//  RAYCASTER
 // ═══════════════════════════════════════════════════════════════
 const raycaster = new THREE.Raycaster();
 const mouse     = new THREE.Vector2();
-let isDragging  = false, pointerDownPos = {x:0,y:0};
+let isDragging = false, pointerDownPos = {x:0, y:0};
+
+function getHits(clientX, clientY) {
+  mouse.x = (clientX/window.innerWidth)*2-1;
+  mouse.y = -(clientY/window.innerHeight)*2+1;
+  raycaster.setFromCamera(mouse, camera);
+  return raycaster.intersectObjects(allMeshes, false).filter(h => {
+    if (!h.face) return true;
+    const n = h.face.normal.clone().transformDirection(h.object.matrixWorld);
+    return n.dot(h.point.clone().sub(camera.position).normalize()) < 0;
+  });
+}
 
 renderer.domElement.addEventListener('pointerdown', e => {
   pointerDownPos = {x:e.clientX, y:e.clientY};
@@ -283,18 +352,9 @@ renderer.domElement.addEventListener('pointerdown', e => {
 });
 renderer.domElement.addEventListener('pointermove', e => {
   const dx = e.clientX - pointerDownPos.x, dy = e.clientY - pointerDownPos.y;
-  if (Math.sqrt(dx*dx+dy*dy) > 5) isDragging = true;
-
-  // Hover detection (throttled)
-  mouse.x = (e.clientX/window.innerWidth)*2-1;
-  mouse.y = -(e.clientY/window.innerHeight)*2+1;
-  raycaster.setFromCamera(mouse, camera);
-  const hits = raycaster.intersectObjects(allMeshes, false).filter(h => {
-    if (!h.face) return true;
-    const n = h.face.normal.clone().transformDirection(h.object.matrixWorld);
-    return n.dot(h.point.clone().sub(camera.position).normalize()) < 0;
-  });
-  const hit = hits[0]?.object || null;
+  if (dx*dx + dy*dy > 25) isDragging = true;
+  if (isMobile()) return; // skip hover on touch
+  const hit = getHits(e.clientX, e.clientY)[0]?.object || null;
   if (hit !== hoveredMesh) {
     if (hoveredMesh && hoveredMesh !== selectedMesh) resetEmissive(hoveredMesh);
     hoveredMesh = hit;
@@ -303,32 +363,24 @@ renderer.domElement.addEventListener('pointermove', e => {
   }
 });
 
-renderer.domElement.addEventListener('click', async (e) => {
+renderer.domElement.addEventListener('click', async e => {
   if (isDragging) return;
-  mouse.x = (e.clientX/window.innerWidth)*2-1;
-  mouse.y = -(e.clientY/window.innerHeight)*2+1;
-  raycaster.setFromCamera(mouse, camera);
-  const hits = raycaster.intersectObjects(allMeshes, false).filter(h => {
-    if (!h.face) return true;
-    const n = h.face.normal.clone().transformDirection(h.object.matrixWorld);
-    return n.dot(h.point.clone().sub(camera.position).normalize()) < 0;
-  });
-
+  const hits = getHits(e.clientX, e.clientY);
   if (!hits.length) {
     closePanel();
     if (selectedMesh) { resetEmissive(selectedMesh); selectedMesh=null; }
     return;
   }
-
   const mesh = hits[0].object;
   if (selectedMesh && selectedMesh !== mesh) resetEmissive(selectedMesh);
   selectedMesh = mesh;
+  window._selectedMesh = mesh;
   setEmissive(mesh, SELECT_COLOR, 0.72);
   openPanel(mesh.name || mesh.uuid);
 });
 
 // ═══════════════════════════════════════════════════════════════
-//  PART PANEL UI (vanilla JS — no React dependency)
+//  PART PANEL UI
 // ═══════════════════════════════════════════════════════════════
 const panelRoot = document.getElementById('part-panel-root');
 let panelMeshName = null;
@@ -337,41 +389,39 @@ function closePanel() {
   panelRoot.innerHTML = '';
   panelMeshName = null;
 }
+window.closePanel = closePanel;
 
 async function openPanel(meshName) {
   panelMeshName = meshName;
   showSkeleton(meshName);
-
-  const map   = await getPartsMap();
+  const map = await getPartsMap();
   const entry = map[meshName];
-
-  if (meshName !== panelMeshName) return; // stale
-
+  if (meshName !== panelMeshName) return;
   if (entry?.bcItemNo) {
     showLoading(meshName, entry.bcItemNo);
     try {
       const part = await callGAS('getPartByItemNo', entry.bcItemNo);
       if (meshName !== panelMeshName) return;
-      if (part?.no) { showPartInfo(meshName, { ...part, category: entry.category || part.category }); return; }
-    } catch { /* fallthrough to search */ }
+      if (part?.no) { showPartInfo(meshName, {...part, category: entry.category||part.category}); return; }
+    } catch {}
   }
   if (meshName !== panelMeshName) return;
   showSearch(meshName);
 }
 
 function stockColor(qty) {
-  if (qty === null || qty === undefined) return '#6b7280';
+  if (qty == null) return '#6b7280';
   return qty <= 0 ? '#ff0033' : qty <= 5 ? '#eab308' : '#00ff41';
 }
 function stockLabel(qty) {
-  if (qty === null || qty === undefined) return '—';
+  if (qty == null) return '—';
   return qty <= 0 ? 'Sin stock' : qty <= 5 ? 'Stock bajo' : 'En stock';
 }
 function stockRingSVG(qty) {
   const color = stockColor(qty);
-  const r=20,cx=28,cy=28,sw=4, circ=2*Math.PI*r;
+  const r=20, cx=28, cy=28, sw=4, circ=2*Math.PI*r;
   const pct = qty > 0 ? Math.min(qty/Math.max(qty,50),1) : 0;
-  const numLabel = qty===null?'?':qty>99?'99+':String(qty);
+  const numLabel = qty==null ? '?' : qty>99 ? '99+' : String(qty);
   return `<svg width="56" height="56" style="transform:rotate(-90deg)">
     <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#1a1a1a" stroke-width="${sw}"/>
     <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${sw}"
@@ -381,48 +431,59 @@ function stockRingSVG(qty) {
       fill="${color}" font-size="11" font-family="monospace" font-weight="bold"
       style="transform:rotate(90deg);transform-origin:${cx}px ${cy}px">${numLabel}</text>
   </svg>
-  <span style="font-size:9px;font-family:monospace;text-transform:uppercase;letter-spacing:.1em;color:${color}">${stockLabel(qty)}</span>`;
+  <span class="stock-label" style="color:${color}">${stockLabel(qty)}</span>`;
 }
 
-function panelWrap(content, extraStyle='') {
-  return `<div class="part-panel" style="width:288px;background:rgba(8,8,9,.96);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.06);border-radius:18px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.8)${extraStyle && ';'+extraStyle}">${content}</div>`;
-}
-function closeBtn() {
-  return `<button onclick="closePanel();if(window._selectedMesh){resetEmissive(window._selectedMesh);window._selectedMesh=null;}" style="background:none;border:none;color:#4b5563;cursor:pointer;padding:2px;line-height:0;flex-shrink:0" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#4b5563'">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+function closeBtnHTML() {
+  return `<button class="close-btn" onclick="closePanel();if(window._selectedMesh){resetEmissive(window._selectedMesh);window._selectedMesh=null;selectedMesh=null;}" aria-label="Cerrar">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
   </button>`;
+}
+
+function panelWrap(content) {
+  return `<div class="part-panel">
+    <div class="part-panel-inner">${content}</div>
+  </div>`;
 }
 
 function showSkeleton(meshName) {
   panelRoot.innerHTML = panelWrap(`
-    <div style="padding:16px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <div class="shimmer" style="height:10px;width:120px;border-radius:6px"></div>
-        ${closeBtn()}
+    <div class="panel-handle"></div>
+    <div class="panel-scroll">
+      <div class="panel-pad">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div class="shimmer" style="height:10px;width:110px;border-radius:6px"></div>
+          ${closeBtnHTML()}
+        </div>
+        <div class="shimmer" style="height:30px;width:160px;border-radius:8px;margin-bottom:12px"></div>
+        <div class="shimmer" style="height:13px;width:100%;border-radius:6px;margin-bottom:6px"></div>
+        <div class="shimmer" style="height:13px;width:70%;border-radius:6px;margin-bottom:20px"></div>
+        <div style="display:flex;gap:8px">
+          <div class="shimmer" style="height:24px;width:60px;border-radius:99px"></div>
+          <div class="shimmer" style="height:24px;width:80px;border-radius:99px"></div>
+        </div>
       </div>
-      <div class="shimmer" style="height:28px;width:160px;border-radius:8px;margin-bottom:10px"></div>
-      <div class="shimmer" style="height:13px;width:100%;border-radius:6px;margin-bottom:6px"></div>
-      <div class="shimmer" style="height:13px;width:75%;border-radius:6px;margin-bottom:18px"></div>
-      <div style="display:flex;gap:8px">
-        <div class="shimmer" style="height:24px;width:64px;border-radius:99px"></div>
-        <div class="shimmer" style="height:24px;width:80px;border-radius:99px"></div>
-      </div>
+      <div class="safe-bottom-pad"></div>
     </div>
   `);
 }
 
 function showLoading(meshName, itemNo) {
   panelRoot.innerHTML = panelWrap(`
-    <div style="padding:16px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <span style="font-size:9px;font-family:monospace;color:#4b5563;text-transform:uppercase;letter-spacing:.1em">Cargando...</span>
-        ${closeBtn()}
+    <div class="panel-handle"></div>
+    <div class="panel-scroll">
+      <div class="panel-pad">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:9px;font-family:monospace;color:#4b5563;text-transform:uppercase;letter-spacing:.1em">Cargando…</span>
+          ${closeBtnHTML()}
+        </div>
+        <p class="panel-part-no" style="font-family:monospace;font-weight:700;color:#FFD700;text-shadow:0 0 20px #FFD70044;margin-bottom:12px">${itemNo}</p>
+        <div style="display:flex;align-items:center;gap:10px;color:#6b7280;font-size:12px">
+          <div style="width:14px;height:14px;border:2px solid #C9A84C;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div>
+          Consultando Business Central…
+        </div>
       </div>
-      <p style="font-size:28px;font-family:monospace;font-weight:700;color:#FFD700;margin-bottom:8px;text-shadow:0 0 20px #FFD70044">${itemNo}</p>
-      <div style="display:flex;align-items:center;gap:8px;color:#6b7280;font-size:11px">
-        <div style="width:14px;height:14px;border:2px solid #C9A84C;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></div>
-        Consultando Business Central…
-      </div>
+      <div class="safe-bottom-pad"></div>
     </div>
   `);
 }
@@ -431,37 +492,41 @@ function showPartInfo(meshName, part) {
   const color = stockColor(part.inventory);
   const bcUrl = part.bcUrl || `${BC_BASE_URL}?page=30&filter=No. IS ${encodeURIComponent(part.no)}`;
   const chips = [part.category, part.unitOfMeasure].filter(Boolean)
-    .map(c => `<span style="font-size:9px;font-family:monospace;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;background:#111113;border:1px solid #1e1e22;border-radius:99px;padding:3px 10px">${c}</span>`).join('');
+    .map(c => `<span class="chip">${c}</span>`).join('');
 
   panelRoot.innerHTML = panelWrap(`
-    <div style="padding:16px">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
-        <div style="min-width:0">
-          <span style="font-size:9px;font-family:monospace;color:#4b5563;text-transform:uppercase;letter-spacing:.1em">Parte Identificada</span>
-          <p style="font-size:30px;font-family:monospace;font-weight:700;color:#FFD700;margin-top:3px;line-height:1;text-shadow:0 0 20px #FFD70044;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${part.no}</p>
+    <div class="panel-handle"></div>
+    <div class="panel-scroll">
+      <div class="panel-pad" style="border-bottom:1px solid ${color}15">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px">
+          <div style="min-width:0;padding-right:8px">
+            <span style="font-size:9px;font-family:monospace;color:#4b5563;text-transform:uppercase;letter-spacing:.1em">Parte Identificada</span>
+            <p class="panel-part-no" style="font-family:monospace;font-weight:700;color:#FFD700;margin-top:4px;line-height:1;text-shadow:0 0 20px #FFD70044;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${part.no}</p>
+          </div>
+          ${closeBtnHTML()}
         </div>
-        ${closeBtn()}
+        <p style="font-size:14px;font-weight:600;color:#eee;margin-bottom:12px;line-height:1.45">${part.description||''}</p>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px">${chips}</div>
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0">
+            ${stockRingSVG(part.inventory)}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;flex:1;min-width:0">
+            <a href="${bcUrl}" target="_blank" class="action-btn action-btn-primary panel-btn" style="border-radius:12px">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              Abrir en BC
+            </a>
+            <button onclick="openSearchPanel('${meshName.replace(/'/g,"\'")}')" class="action-btn action-btn-secondary panel-btn" style="border-radius:12px">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              Re-buscar
+            </button>
+          </div>
+        </div>
+        <p style="font-size:8px;font-family:monospace;color:#1e1e22;margin-top:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${meshName}</p>
       </div>
-      <p style="font-size:13px;font-weight:600;color:#eee;margin-bottom:12px;line-height:1.4">${part.description || ''}</p>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">${chips}</div>
-      <div style="display:flex;align-items:flex-end;justify-content:space-between">
-        <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
-          ${stockRingSVG(part.inventory)}
-        </div>
-        <div style="display:flex;flex-direction:column;gap:6px">
-          <a href="${bcUrl}" target="_blank" style="display:flex;align-items:center;gap:6px;font-size:10px;font-family:monospace;color:#C9A84C;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.3);border-radius:10px;padding:7px 14px;text-decoration:none;transition:all .2s" onmouseover="this.style.color='#FFD700';this.style.background='rgba(201,168,76,.2)'" onmouseout="this.style.color='#C9A84C';this.style.background='rgba(201,168,76,.1)'">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-            Abrir en BC
-          </a>
-          <button onclick="openSearchPanel('${meshName.replace(/'/g,"\\'")}')" style="display:flex;align-items:center;gap:6px;font-size:10px;font-family:monospace;color:#6b7280;background:#111113;border:1px solid #1e1e22;border-radius:10px;padding:7px 14px;cursor:pointer;transition:all .2s" onmouseover="this.style.color='#aaa';this.style.background='#1a1a1e'" onmouseout="this.style.color='#6b7280';this.style.background='#111113'">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-            Re-buscar
-          </button>
-        </div>
-      </div>
-      <p style="font-size:8px;font-family:monospace;color:#1e1e22;margin-top:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${meshName}</p>
+      <div class="safe-bottom-pad"></div>
     </div>
-  `, `border-color:${color}22`);
+  `);
 }
 
 function openSearchPanel(meshName) {
@@ -472,37 +537,37 @@ window.openSearchPanel = openSearchPanel;
 
 function showSearch(meshName) {
   panelRoot.innerHTML = panelWrap(`
-    <div style="padding:14px 16px 10px;border-bottom:1px solid rgba(255,255,255,.04)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <span style="font-size:9px;font-family:monospace;color:#4b5563;text-transform:uppercase;letter-spacing:.1em">Identificar Parte</span>
-        ${closeBtn()}
+    <div class="panel-handle"></div>
+    <div class="panel-scroll">
+      <div class="panel-pad" style="border-bottom:1px solid rgba(255,255,255,.04)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:9px;font-family:monospace;color:#4b5563;text-transform:uppercase;letter-spacing:.1em">Identificar Parte</span>
+          ${closeBtnHTML()}
+        </div>
+        <p style="font-size:10px;font-family:monospace;color:#2d3748;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:14px">${meshName}</p>
+        <div class="search-wrap" id="search-wrap">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4b5563" stroke-width="2" style="flex-shrink:0"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input id="search-input" class="search-input" placeholder="Nº parte o descripción…" autocomplete="off"
+            inputmode="search" enterkeyhint="search"
+            oninput="handleSearch(this.value,'${meshName.replace(/'/g,"\'")}')">
+          <div id="search-spinner" style="display:none;width:14px;height:14px;border:2px solid #C9A84C;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0"></div>
+        </div>
+        <p id="search-error" style="font-size:10px;color:#ff0033;margin-top:8px;display:none"></p>
       </div>
-      <p style="font-size:10px;font-family:monospace;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${meshName}</p>
-    </div>
-    <div style="padding:12px 16px 10px">
-      <div id="search-wrap" style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.04);border:1px solid #1e1e22;border-radius:12px;padding:9px 12px;transition:border-color .2s">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4b5563" stroke-width="2" style="flex-shrink:0"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input id="search-input" placeholder="Nº parte o descripción…" autocomplete="off"
-          style="background:none;border:none;outline:none;color:#eee;font-size:12px;width:100%;font-family:monospace"
-          oninput="handleSearch(this.value,'${meshName.replace(/'/g,"\\'")}')"
-          onfocus="document.getElementById('search-wrap').style.borderColor='rgba(201,168,76,.5)'"
-          onblur="document.getElementById('search-wrap').style.borderColor='#1e1e22'">
-        <div id="search-spinner" style="display:none;width:12px;height:12px;border:2px solid #C9A84C;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0"></div>
+      <div id="search-results" class="panel-search-results">
+        <p style="font-size:11px;color:#374151;text-align:center;padding:18px 20px">Busca para identificar esta pieza</p>
       </div>
-      <p id="search-error" style="font-size:10px;color:#ff0033;margin-top:6px;display:none"></p>
-    </div>
-    <div id="search-results" style="max-height:200px;overflow-y:auto;border-top:1px solid rgba(255,255,255,.03);scrollbar-width:thin;scrollbar-color:#222 transparent">
-      <p style="font-size:10px;color:#374151;text-align:center;padding:14px 16px">Busca para identificar esta pieza</p>
+      <div class="safe-bottom-pad"></div>
     </div>
   `);
-  setTimeout(() => document.getElementById('search-input')?.focus(), 60);
+  setTimeout(() => document.getElementById('search-input')?.focus(), 80);
 }
 
 let _searchDebounce = null;
 window.handleSearch = function(query, meshName) {
   clearTimeout(_searchDebounce);
   if (!query || query.length < 2) {
-    document.getElementById('search-results').innerHTML = '<p style="font-size:10px;color:#374151;text-align:center;padding:14px 16px">Escribe al menos 2 caracteres</p>';
+    document.getElementById('search-results').innerHTML = '<p style="font-size:11px;color:#374151;text-align:center;padding:16px 20px">Escribe al menos 2 caracteres</p>';
     return;
   }
   document.getElementById('search-spinner').style.display = '';
@@ -513,24 +578,22 @@ window.handleSearch = function(query, meshName) {
       const el = document.getElementById('search-results');
       if (!el) return;
       if (!results?.length) {
-        el.innerHTML = '<p style="font-size:10px;color:#4b5563;text-align:center;padding:14px 16px">Sin resultados en Business Central</p>';
+        el.innerHTML = '<p style="font-size:11px;color:#4b5563;text-align:center;padding:16px 20px">Sin resultados en Business Central</p>';
         return;
       }
       el.innerHTML = results.map(item => `
-        <button onclick="tagPart('${meshName.replace(/'/g,"\\'")}','${item.no.replace(/'/g,"\\'")}','${(item.description||'').replace(/'/g,"\\'").replace(/"/g,"&quot;")}','${(item.category||'').replace(/'/g,"\\'")}')"
-          style="width:100%;text-align:left;padding:10px 16px;background:none;border:none;border-bottom:1px solid rgba(255,255,255,.03);cursor:pointer;transition:background .15s"
-          onmouseover="this.style.background='rgba(255,255,255,.03)'" onmouseout="this.style.background='none'">
+        <button class="tag-row-btn" onclick="tagPart('${meshName.replace(/'/g,"\'")}','${item.no.replace(/'/g,"\'")}','${(item.description||'').replace(/'/g,"\'").replace(/"/g,"&quot;")}','${(item.category||'').replace(/'/g,"\'")}')">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
             <div style="min-width:0">
-              <p style="font-size:11px;font-family:monospace;color:#C9A84C;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.no}</p>
-              <p style="font-size:10px;color:#9ca3af;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">${item.description||''}</p>
+              <p style="font-size:13px;font-family:monospace;color:#C9A84C;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.no}</p>
+              <p style="font-size:11px;color:#9ca3af;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px">${item.description||''}</p>
             </div>
-            <span style="font-size:9px;font-family:monospace;color:#374151;flex-shrink:0;margin-top:2px">Tag →</span>
+            <span style="font-size:9px;font-family:monospace;color:#374151;flex-shrink:0;padding-top:3px">Tag →</span>
           </div>
-          ${item.category ? `<span style="display:inline-block;margin-top:5px;font-size:8px;font-family:monospace;text-transform:uppercase;letter-spacing:.08em;color:#374151;background:#111113;border-radius:99px;padding:2px 8px">${item.category}</span>` : ''}
+          ${item.category ? `<span class="chip" style="margin-top:6px;display:inline-block">${item.category}</span>` : ''}
         </button>
       `).join('');
-    } catch(e) {
+    } catch {
       document.getElementById('search-spinner').style.display = 'none';
       const errEl = document.getElementById('search-error');
       if (errEl) { errEl.style.display=''; errEl.textContent='Error al buscar en BC'; }
@@ -544,23 +607,22 @@ window.tagPart = async function(meshName, bcItemNo, description, category) {
     if (_partsMap) _partsMap[meshName] = { bcItemNo, category };
     updateTaggedCounter();
     showPartInfo(meshName, { no:bcItemNo, description, category, inventory:null });
-    // Fetch full info in background
     callGAS('getPartByItemNo', bcItemNo).then(full => {
-      if (full?.no && panelMeshName === meshName) showPartInfo(meshName, { ...full, category: category||full.category });
+      if (full?.no && panelMeshName === meshName) showPartInfo(meshName, {...full, category: category||full.category});
     }).catch(()=>{});
-  } catch(e) {
-    console.error('tagPart error:', e);
-  }
+  } catch(e) { console.error('tagPart error:', e); }
 };
 
 // ═══════════════════════════════════════════════════════════════
-//  RENDER LOOP
+//  RENDER LOOP + RESIZE
 // ═══════════════════════════════════════════════════════════════
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth/window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
+  const counter = document.getElementById('tagged-label');
+  if (counter) counter.textContent = window.innerWidth < 360 ? '' : 'catalogadas';
 });
 
 (function animate() {
@@ -569,8 +631,5 @@ window.addEventListener('resize', () => {
   composer.render();
 })();
 </script>
-<style>
-@keyframes spin { to { transform:rotate(360deg) } }
-</style>
 </body>
 </html>
