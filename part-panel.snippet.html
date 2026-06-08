@@ -1,0 +1,392 @@
+<!--
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  STARK FUTURE — 3D Part Identifier Panel (BC Integration)               ║
+  ║  Versión: 1.0.0                                                         ║
+  ║                                                                          ║
+  ║  INSTRUCCIONES DE INSTALACIÓN:                                           ║
+  ║                                                                          ║
+  ║  1. Añade este snippet ANTES del closing </script> del index.html        ║
+  ║     del proyecto "Stark Future · Atlas Copco Torque Traceability"        ║
+  ║                                                                          ║
+  ║  2. En el mismo index.html, busca el componente BoltPanel y reemplaza   ║
+  ║     el bloque "if (!bolt) return (...)" con:                             ║
+  ║         if (!bolt) return <PartPanel meshName={meshName} onClose={onClose} />;
+  ║                                                                          ║
+  ║  3. Añade bc-part-lookup.snippet.gs a tu proyecto Apps Script            ║
+  ║                                                                          ║
+  ║  4. Actualiza PARTS_MAP_URL con la URL raw de GitHub de parts-mesh-map.json
+  ╚══════════════════════════════════════════════════════════════════════════╝
+-->
+
+<script type="text/babel">
+// ─── CONFIGURACIÓN ───────────────────────────────────────────────────────────
+const PARTS_MAP_URL = 'https://raw.githubusercontent.com/miguelmontoya-SFM/stark-public-assets/main/parts-mesh-map.json';
+const BC_TENANT_URL = 'https://businesscentral.dynamics.com'; // Base URL para links directos a BC
+
+// ─── CACHÉ EN MEMORIA DEL MAPA MESH → PARTE ──────────────────────────────────
+let _partMapCache = null;
+async function getPartsMap() {
+  if (_partMapCache) return _partMapCache;
+  try {
+    const res = await fetch(PARTS_MAP_URL + '?t=' + Math.floor(Date.now() / 300000)); // 5-min cache bust
+    _partMapCache = await res.json();
+  } catch {
+    _partMapCache = {};
+  }
+  return _partMapCache;
+}
+
+// ─── UTILIDADES ───────────────────────────────────────────────────────────────
+function callGAS(fn, ...args) {
+  return new Promise((resolve, reject) => {
+    const runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+    runner[fn](...args);
+  });
+}
+
+function stockColor(qty) {
+  if (qty === null || qty === undefined) return '#6b7280';
+  if (qty <= 0)  return '#ff0033';
+  if (qty <= 5)  return '#eab308';
+  return '#00ff41';
+}
+
+function stockLabel(qty) {
+  if (qty === null || qty === undefined) return '—';
+  if (qty <= 0)  return 'Sin stock';
+  if (qty <= 5)  return 'Stock bajo';
+  return 'En stock';
+}
+
+// ─── COMPONENTE: STOCK RING ────────────────────────────────────────────────────
+const StockRing = ({ qty }) => {
+  const color = stockColor(qty);
+  const r = 20, cx = 28, cy = 28, stroke = 4;
+  const circ = 2 * Math.PI * r;
+  const max = Math.max(qty || 0, 50);
+  const pct = qty > 0 ? Math.min(qty / max, 1) : 0;
+  const dash = circ * pct;
+
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <svg width={56} height={56} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1a1a1a" strokeWidth={stroke} />
+        <circle
+          cx={cx} cy={cy} r={r} fill="none"
+          stroke={color} strokeWidth={stroke}
+          strokeDasharray={`${dash} ${circ}`}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dasharray 0.6s cubic-bezier(.4,0,.2,1)', filter: `drop-shadow(0 0 4px ${color}88)` }}
+        />
+        <text
+          x={cx} y={cy + 1}
+          textAnchor="middle" dominantBaseline="middle"
+          fill={color} fontSize={qty === null ? 10 : 11}
+          fontFamily="monospace" fontWeight="bold"
+          style={{ transform: 'rotate(90deg)', transformOrigin: `${cx}px ${cy}px` }}
+        >
+          {qty === null ? '?' : qty > 99 ? '99+' : qty}
+        </text>
+      </svg>
+      <span className="text-[9px] font-mono uppercase tracking-wider" style={{ color }}>{stockLabel(qty)}</span>
+    </div>
+  );
+};
+
+// ─── COMPONENTE: SKELETON SHIMMER ─────────────────────────────────────────────
+const PartPanelSkeleton = ({ onClose }) => (
+  <div className="absolute bottom-4 right-4 w-72 bg-[#080808]/96 backdrop-blur-xl border border-white/5 rounded-2xl p-4 z-30 shadow-2xl"
+       style={{ animation: 'slideInRight 0.25s cubic-bezier(.4,0,.2,1)' }}>
+    <div className="flex items-center justify-between mb-3">
+      <div className="h-3 w-24 bg-neutral-800 rounded animate-pulse" />
+      <button onClick={onClose} className="text-neutral-700 hover:text-white"><svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div className="h-8 w-40 bg-neutral-800 rounded animate-pulse mb-2" />
+    <div className="h-4 w-full bg-neutral-800 rounded animate-pulse mb-1" />
+    <div className="h-4 w-3/4 bg-neutral-800 rounded animate-pulse mb-4" />
+    <div className="flex gap-2">
+      <div className="h-6 w-16 bg-neutral-800 rounded-full animate-pulse" />
+      <div className="h-6 w-16 bg-neutral-800 rounded-full animate-pulse" />
+    </div>
+  </div>
+);
+
+// ─── COMPONENTE: ESTADO "BUSCAR PARTE" ────────────────────────────────────────
+const PartSearchState = ({ meshName, onClose, onPartTagged }) => {
+  const [query, setQuery]       = React.useState('');
+  const [results, setResults]   = React.useState(null);
+  const [loading, setLoading]   = React.useState(false);
+  const [tagging, setTagging]   = React.useState(null); // bcItemNo being tagged
+  const [error, setError]       = React.useState('');
+  const inputRef                = React.useRef(null);
+  const debounceRef             = React.useRef(null);
+
+  React.useEffect(() => { setTimeout(() => inputRef.current?.focus(), 50); }, []);
+
+  const search = React.useCallback(async (q) => {
+    if (!q || q.length < 2) { setResults(null); return; }
+    setLoading(true);
+    setError('');
+    try {
+      const data = await callGAS('searchBcItems', q.trim());
+      setResults(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setError('Error al buscar en Business Central');
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const handleInput = (e) => {
+    const q = e.target.value;
+    setQuery(q);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => search(q), 380);
+  };
+
+  const tagPart = async (item) => {
+    setTagging(item.no);
+    try {
+      await callGAS('tagMeshAsPart', meshName, item.no, item.category || '');
+      if (_partMapCache) {
+        _partMapCache[meshName] = { bcItemNo: item.no, category: item.category || '' };
+      }
+      onPartTagged(item);
+    } catch {
+      setTagging(null);
+    }
+  };
+
+  return (
+    <div className="absolute bottom-4 right-4 w-80 bg-[#080808]/96 backdrop-blur-xl border border-white/5 rounded-2xl z-30 shadow-2xl overflow-hidden"
+         style={{ animation: 'slideInRight 0.25s cubic-bezier(.4,0,.2,1)' }}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-white/5">
+        <div>
+          <p className="text-[9px] font-mono text-neutral-600 uppercase tracking-widest">Identificar Parte</p>
+          <p className="text-[10px] font-mono text-neutral-500 mt-0.5 truncate max-w-[200px]">{meshName}</p>
+        </div>
+        <button onClick={onClose} className="text-neutral-700 hover:text-white shrink-0">
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      {/* Search input */}
+      <div className="px-4 py-3">
+        <div className="flex items-center gap-2 bg-neutral-900/80 border border-neutral-800 rounded-xl px-3 py-2 focus-within:border-[#C9A84C]/50 transition-colors">
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth={2} className="shrink-0">
+            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={handleInput}
+            placeholder="Nº parte o descripción…"
+            className="bg-transparent text-white text-xs w-full outline-none placeholder-neutral-600 font-mono"
+          />
+          {loading && (
+            <svg className="animate-spin shrink-0" width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#C9A84C" strokeWidth={2}>
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/>
+            </svg>
+          )}
+        </div>
+        {error && <p className="text-[10px] text-[#ff0033] mt-1.5 px-1">{error}</p>}
+      </div>
+
+      {/* Results list */}
+      {results !== null && (
+        <div className="max-h-56 overflow-y-auto border-t border-white/5 divide-y divide-white/[0.03]"
+             style={{ scrollbarWidth: 'thin', scrollbarColor: '#333 transparent' }}>
+          {results.length === 0 ? (
+            <p className="text-neutral-600 text-xs text-center py-4">Sin resultados en BC</p>
+          ) : results.map((item) => (
+            <button
+              key={item.no}
+              onClick={() => tagPart(item)}
+              disabled={!!tagging}
+              className="w-full text-left px-4 py-2.5 hover:bg-white/[0.03] transition-colors group disabled:opacity-60"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-mono text-[#C9A84C] truncate group-hover:text-[#FFD700]">{item.no}</p>
+                  <p className="text-[10px] text-neutral-400 truncate mt-0.5">{item.description}</p>
+                </div>
+                <div className="shrink-0 flex items-center gap-1 mt-0.5">
+                  {tagging === item.no ? (
+                    <svg className="animate-spin" width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#00ff41" strokeWidth={2}>
+                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83"/>
+                    </svg>
+                  ) : (
+                    <span className="text-[9px] text-neutral-700 group-hover:text-[#C9A84C] font-mono uppercase">Tag →</span>
+                  )}
+                </div>
+              </div>
+              {item.category && (
+                <span className="inline-block mt-1 text-[8px] font-mono uppercase tracking-wider text-neutral-700 bg-neutral-900 px-1.5 py-0.5 rounded">
+                  {item.category}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Footer hint */}
+      {!results && (
+        <p className="text-[9px] text-neutral-700 text-center pb-3 px-4">
+          Busca para identificar esta pieza y ligarla a BC
+        </p>
+      )}
+    </div>
+  );
+};
+
+// ─── COMPONENTE: ESTADO "PARTE IDENTIFICADA" ──────────────────────────────────
+const PartInfoState = ({ part, meshName, onClose, onReSearch }) => {
+  const color = stockColor(part.inventory);
+  const hasBcUrl = part.bcUrl || (BC_TENANT_URL && part.no);
+  const bcUrl = part.bcUrl || `${BC_TENANT_URL}/bc?page=30&filter=No. IS ${encodeURIComponent(part.no)}`;
+
+  return (
+    <div className="absolute bottom-4 right-4 w-72 bg-[#080808]/96 backdrop-blur-xl border border-white/5 rounded-2xl p-4 z-30 shadow-2xl"
+         style={{ animation: 'slideInRight 0.25s cubic-bezier(.4,0,.2,1)', borderColor: color + '22' }}>
+      {/* Header */}
+      <div className="flex items-start justify-between mb-3">
+        <div className="min-w-0">
+          <p className="text-[9px] font-mono text-neutral-600 uppercase tracking-widest">Parte Identificada</p>
+          <p className="text-3xl font-mono font-bold mt-1 truncate" style={{ color: '#FFD700', textShadow: '0 0 20px #FFD70044' }}>
+            {part.no}
+          </p>
+        </div>
+        <button onClick={onClose} className="text-neutral-700 hover:text-white shrink-0 mt-1">
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      {/* Description */}
+      <p className="text-white font-semibold text-sm mb-3 leading-snug">{part.description}</p>
+
+      {/* Chips */}
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        {part.category && (
+          <span className="text-[9px] font-mono uppercase tracking-wider text-neutral-400 bg-neutral-900 border border-neutral-800 px-2 py-1 rounded-full">
+            {part.category}
+          </span>
+        )}
+        {part.unitOfMeasure && (
+          <span className="text-[9px] font-mono uppercase tracking-wider text-neutral-400 bg-neutral-900 border border-neutral-800 px-2 py-1 rounded-full">
+            {part.unitOfMeasure}
+          </span>
+        )}
+      </div>
+
+      {/* Stock + Actions row */}
+      <div className="flex items-end justify-between">
+        <StockRing qty={part.inventory} />
+        <div className="flex flex-col gap-1.5">
+          {hasBcUrl && (
+            <a href={bcUrl} target="_blank" rel="noreferrer"
+               className="flex items-center gap-1.5 text-[10px] font-mono text-[#C9A84C] hover:text-[#FFD700] bg-[#C9A84C]/10 hover:bg-[#C9A84C]/20 border border-[#C9A84C]/30 rounded-lg px-3 py-1.5 transition-colors">
+              <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              Abrir en BC
+            </a>
+          )}
+          <button onClick={onReSearch}
+                  className="flex items-center gap-1.5 text-[10px] font-mono text-neutral-500 hover:text-neutral-300 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 rounded-lg px-3 py-1.5 transition-colors">
+            <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            Re-buscar
+          </button>
+        </div>
+      </div>
+
+      {/* Mesh name subtle footer */}
+      <p className="text-[8px] font-mono text-neutral-800 mt-3 truncate">{meshName}</p>
+    </div>
+  );
+};
+
+// ─── COMPONENTE PRINCIPAL: PartPanel ─────────────────────────────────────────
+// INSTRUCCIÓN: Reemplaza el bloque "if (!bolt) return (...)" dentro de BoltPanel con:
+//   if (!bolt) return <PartPanel meshName={meshName} onClose={onClose} />;
+const PartPanel = ({ meshName, onClose }) => {
+  // phase: 'resolving' | 'search' | 'loading' | 'found' | 'notFound'
+  const [phase, setPhase]   = React.useState('resolving');
+  const [part, setPart]     = React.useState(null);
+  const [forceSearch, setForceSearch] = React.useState(false);
+
+  // On mount: check if this mesh is already mapped
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const map = await getPartsMap();
+      const entry = map[meshName];
+      if (cancelled) return;
+      if (!entry?.bcItemNo || forceSearch) {
+        setPhase('search');
+        return;
+      }
+      // Mesh is tagged — fetch BC data
+      setPhase('loading');
+      try {
+        const data = await callGAS('getPartByItemNo', entry.bcItemNo);
+        if (cancelled) return;
+        if (data?.no) {
+          setPart({ ...data, category: entry.category || data.category });
+          setPhase('found');
+        } else {
+          setPhase('search');
+        }
+      } catch {
+        if (!cancelled) setPhase('search');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [meshName, forceSearch]);
+
+  const handlePartTagged = (item) => {
+    // After tagging, fetch full part info
+    setPhase('loading');
+    callGAS('getPartByItemNo', item.no)
+      .then(data => {
+        setPart({ ...data, category: item.category || data?.category });
+        setPhase('found');
+      })
+      .catch(() => {
+        // Show minimal info from search result even without full BC fetch
+        setPart({ no: item.no, description: item.description, category: item.category, inventory: null });
+        setPhase('found');
+      });
+  };
+
+  if (phase === 'resolving' || phase === 'loading') return <PartPanelSkeleton onClose={onClose} />;
+  if (phase === 'found' && part)
+    return <PartInfoState part={part} meshName={meshName} onClose={onClose} onReSearch={() => setForceSearch(true)} />;
+  return <PartSearchState meshName={meshName} onClose={onClose} onPartTagged={handlePartTagged} />;
+};
+</script>
+
+<!-- Animación slide-in para el panel -->
+<style>
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+</style>
+
+<!--
+  ════════════════════════════════════════════════════════════
+  PASO 2: Dentro del componente BoltPanel, busca este bloque:
+
+        if (!bolt) return (
+          <div className="absolute bottom-4 left-4 ...">
+            ...no hay tornillo calibrado...
+          </div>
+        );
+
+  Y reemplázalo con esta línea:
+
+        if (!bolt) return <PartPanel meshName={meshName} onClose={onClose} />;
+
+  ════════════════════════════════════════════════════════════
+-->
